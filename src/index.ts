@@ -1,18 +1,20 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Bind resources to your worker in `wrangler.jsonc`. After adding bindings, a type definition for the
- * `Env` object can be regenerated with `npm run cf-typegen`.
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
+export interface Env {
+  DISPATCHER: DispatchNamespace;
+}
 
 export default {
-	async fetch(request, env, ctx): Promise<Response> {
-		return new Response("Hello World!");
-	},
-} satisfies ExportedHandler<Env>;
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    const name = url.hostname.split(".")[0];
+
+    try {
+      const userWorker = env.DISPATCHER.get(name);
+      return await userWorker.fetch(request);
+    } catch (e: any) {
+      if (e.message?.includes("Worker not found")) {
+        return new Response(`Service "${name}" bestaat niet onder ordint.dev`, { status: 404 });
+      }
+      return new Response("Interne fout: " + e.message, { status: 500 });
+    }
+  },
+};
