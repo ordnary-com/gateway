@@ -1,8 +1,35 @@
 import { SELF } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
 
+describe("hostname validation", () => {
+  it("rejects a nested subdomain instead of routing to its first label", async () => {
+    const response = await SELF.fetch("https://a.b.ordint.dev/");
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toContain("not a valid service address");
+  });
+
+  it("rejects a hostname outside the zone", async () => {
+    const response = await SELF.fetch("https://billing.example.com/");
+
+    expect(response.status).toBe(404);
+  });
+
+  it("rejects the apex", async () => {
+    const response = await SELF.fetch("https://ordint.dev/");
+
+    expect(response.status).toBe(404);
+  });
+
+  it("rejects a label that cannot be a service name", async () => {
+    const response = await SELF.fetch("https://-billing.ordint.dev/");
+
+    expect(response.status).toBe(404);
+  });
+});
+
 /**
- * Every code path in the gateway goes through the DISPATCHER binding, and
+ * Every remaining code path in the gateway goes through the DISPATCHER binding, and
  * dispatch namespaces are not emulated by the local runtime: `env.DISPATCHER`
  * is undefined under vitest-pool-workers, so there is nothing meaningful to
  * assert without a deployed namespace behind it.

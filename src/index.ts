@@ -25,14 +25,46 @@
  */
 const WORKER_NOT_FOUND = "Worker not found";
 
+/**
+ * The zone this gateway serves. A request reaches us through the
+ * `*.ordint.dev/*` route, but the route pattern also matches deeper names such
+ * as `a.b.ordint.dev`, so the shape is checked here rather than assumed.
+ */
+const ZONE = "ordint.dev";
+
+/** A single DNS label: what a service is allowed to be named. */
+const SERVICE_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/**
+ * Returns the service name for a request hostname, or null when the hostname
+ * is not exactly one label under the zone.
+ *
+ * Requiring a single label matters: `a.b.ordint.dev` would otherwise resolve to
+ * the `a` service, so a typo in a nested name reaches a real service instead of
+ * failing. Hostnames arrive lowercased from the URL parser.
+ */
+function serviceNameFor(hostname: string): string | null {
+  const labels = hostname.split(".");
+  const zone = labels.slice(1).join(".");
+
+  if (labels.length !== ZONE.split(".").length + 1 || zone !== ZONE) {
+    return null;
+  }
+
+  const [service] = labels;
+  return SERVICE_LABEL.test(service) ? service : null;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    const serviceName = url.hostname.split(".")[0];
+    const serviceName = serviceNameFor(url.hostname);
 
-    // TODO(stijnwtf): reject hostnames that are not exactly three labels.
-    // "a.b.ordint.dev" currently resolves to the "a" service, so a typo in a
-    // nested subdomain reaches a real service instead of failing loudly.
+    if (serviceName === null) {
+      return new Response(`"${url.hostname}" is not a valid service address`, {
+        status: 404,
+      });
+    }
 
     try {
       // TODO(stijnwtf): pass per-tenant limits to get(), so a single service
@@ -43,7 +75,7 @@ export default {
       const error = e as Error;
 
       if (error.message?.includes(WORKER_NOT_FOUND)) {
-        return new Response(`Service "${serviceName}" does not exist on ordint.dev`, {
+        return new Response(`Service "${serviceName}" does not exist on ${ZONE}`, {
           status: 404,
         });
       }

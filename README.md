@@ -20,6 +20,11 @@ foo.ordint.dev  ->  env.DISPATCHER.get("foo").fetch(request)
 The original `Request` is forwarded unmodified, so the downstream Worker sees the real
 URL, method, headers and body. The response is returned as-is.
 
+The hostname has to be exactly one label under `ordint.dev`, and that label has to be a
+valid DNS label. Anything else gets a 404 rather than a lookup, because the route pattern
+`*.ordint.dev/*` also matches deeper names: without the check, `a.b.ordint.dev` would
+quietly reach the `a` service.
+
 That is the whole implementation. See `src/index.ts`.
 
 ## What it deliberately does not do
@@ -79,14 +84,12 @@ The Worker's `name` in its own `wrangler.jsonc` determines the subdomain it answ
 
 Worth knowing before you rely on this in production:
 
-- Hostnames are not validated. `a.b.ordint.dev` resolves to the `a` service
-  instead of failing, so a typo in a nested subdomain can reach a real service.
 - Missing services are detected by matching the runtime's error message. A
   wording change upstream turns every 404 into a 500, and nothing would alert us.
 - No per-tenant limits are passed to `get()`, so one service can consume the
   account CPU budget for all of them.
-- Dispatch namespaces are not emulated locally, so the routing tests are skipped
-  and this path is effectively only covered in production.
+- Dispatch namespaces are not emulated locally. Hostname handling is covered by
+  tests, but the dispatch itself is only exercised in production.
 
 ## Responses from the gateway itself
 
