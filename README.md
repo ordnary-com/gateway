@@ -75,6 +75,19 @@ npx wrangler deploy --dispatch-namespace ordint-internal
 
 The Worker's `name` in its own `wrangler.jsonc` determines the subdomain it answers on.
 
+## Known gaps
+
+Worth knowing before you rely on this in production:
+
+- Hostnames are not validated. `a.b.ordint.dev` resolves to the `a` service
+  instead of failing, so a typo in a nested subdomain can reach a real service.
+- Missing services are detected by matching the runtime's error message. A
+  wording change upstream turns every 404 into a 500, and nothing would alert us.
+- No per-tenant limits are passed to `get()`, so one service can consume the
+  account CPU budget for all of them.
+- Dispatch namespaces are not emulated locally, so the routing tests are skipped
+  and this path is effectively only covered in production.
+
 ## Responses from the gateway itself
 
 The gateway only produces a response of its own in two cases:

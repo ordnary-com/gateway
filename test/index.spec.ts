@@ -1,29 +1,41 @@
-import {
-	env,
-	createExecutionContext,
-	waitOnExecutionContext,
-	SELF,
-} from "cloudflare:test";
+import { SELF } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
-import worker from "../src/index";
 
-// For now, you'll need to do something like this to get a correctly-typed
-// `Request` to pass to `worker.fetch()`.
-const IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
+/**
+ * Every code path in the gateway goes through the DISPATCHER binding, and
+ * dispatch namespaces are not emulated by the local runtime: `env.DISPATCHER`
+ * is undefined under vitest-pool-workers, so there is nothing meaningful to
+ * assert without a deployed namespace behind it.
+ *
+ * These tests describe the contract we want and are skipped until we can back
+ * them with something real.
+ *
+ * TODO(stijnwtf): unskip once the DispatchNamespace can be faked. The likely
+ * shape is a thin interface over `get()` that tests can substitute, which also
+ * removes the direct dependency on the binding in fetch().
+ * TODO(stijnwtf): add a smoke test against a staging service in the namespace
+ * and run it post-deploy, since the routing itself can only break in prod.
+ */
+describe.skip("gateway routing", () => {
+  it("routes a subdomain to the matching service", async () => {
+    const response = await SELF.fetch("https://billing.ordint.dev/health");
 
-describe("Hello World worker", () => {
-	it("responds with Hello World! (unit style)", async () => {
-		const request = new IncomingRequest("http://example.com");
-		// Create an empty context to pass to `worker.fetch()`.
-		const ctx = createExecutionContext();
-		const response = await worker.fetch(request, env, ctx);
-		// Wait for all `Promise`s passed to `ctx.waitUntil()` to settle before running test assertions
-		await waitOnExecutionContext(ctx);
-		expect(await response.text()).toMatchInlineSnapshot(`"Hello World!"`);
-	});
+    expect(response.status).toBe(200);
+  });
 
-	it("responds with Hello World! (integration style)", async () => {
-		const response = await SELF.fetch("https://example.com");
-		expect(await response.text()).toMatchInlineSnapshot(`"Hello World!"`);
-	});
+  it("returns 404 for a service that is not in the namespace", async () => {
+    const response = await SELF.fetch("https://nonexistent.ordint.dev/");
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toContain("does not exist");
+  });
+
+  it("forwards method, path and body unmodified", async () => {
+    const response = await SELF.fetch("https://echo.ordint.dev/v1/items?page=2", {
+      method: "POST",
+      body: "payload",
+    });
+
+    expect(response.status).toBe(200);
+  });
 });
